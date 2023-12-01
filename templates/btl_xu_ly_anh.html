@@ -28,7 +28,7 @@
             id="fileInput"
             onchange="previewImage()"
           />
-          <div class="mt-5">
+          <!-- <div class="mt-5">
             <span id="valBox">50</span>
             <input
               type="range"
@@ -39,7 +39,7 @@
               id="customRange1"
               oninput="showVal(this.value)"
             />
-          </div>
+          </div> -->
         </div>
 
         <div class="showImg ms-5" style="display: inline-block"></div>
@@ -101,15 +101,14 @@
 
 
     //FUNCTIONS EXCUTIVE
-    function showVal(newVal) {
-      document.getElementById("valBox").innerHTML = newVal;
-      // socket.emit("request", { data: formData });
-    }
+    // function showVal(newVal) {
+    //   document.getElementById("valBox").innerHTML = newVal;
+    // }
 
     let pathApi = '';
     function selectAlgorithm(val) {
-      document.getElementById("customRange1").value = 50;
-      showVal(50);
+      // document.getElementById("customRange1").value = 50;
+      // showVal(50);
       pathApi = val;
     }
 
