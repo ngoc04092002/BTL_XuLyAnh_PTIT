@@ -50,6 +50,7 @@
         ></div>
       </div>
       <select
+        style="margin-top: 4px"
         class="form-select form-select-lg mb-3 w-50"
         aria-label=".form-select-lg example"
         onchange="selectAlgorithm(this.value)"
@@ -83,6 +84,7 @@
       "Otsu Algorithm",
       "Run-length Coding",
       "LZW Coding",
+      "Huffman Encoding",
       "Erosion",
       "Dilation",
       "Opening",
@@ -99,13 +101,12 @@
       });
     });
 
-
     //FUNCTIONS EXCUTIVE
     // function showVal(newVal) {
     //   document.getElementById("valBox").innerHTML = newVal;
     // }
 
-    let pathApi = '';
+    let pathApi = "";
     function selectAlgorithm(val) {
       // document.getElementById("customRange1").value = 50;
       // showVal(50);
@@ -137,10 +138,15 @@
       const imgInput = document.getElementById("fileInput");
       const formData = new FormData();
       formData.append("images", imgInput.files[0]);
-      fetch(`http://127.0.0.1:5000/${pathApi.replace(/ /g,'-').toLocaleLowerCase()}`, {
-        method: "POST",
-        body: formData,
-      })
+      fetch(
+        `http://127.0.0.1:5000/${pathApi
+          .replace(/ /g, "-")
+          .toLocaleLowerCase()}`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      )
         .then((response) => response.blob())
         .then((blob) => {
           console.log("blob", blob);

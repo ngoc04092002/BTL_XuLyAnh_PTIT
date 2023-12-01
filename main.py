@@ -1,13 +1,11 @@
 import cv2
 from flask import Flask, request, render_template
 from flask_socketio import SocketIO, emit
-import speech_recognition as sr
 from PIL import Image
 from flask_cors import CORS
 import io
-from websockets.server import serve
-import json
-import onnxruntime as rt
+from collections import defaultdict
+import heapq
 import numpy as np
 from scipy.ndimage.filters import convolve
 
@@ -514,6 +512,88 @@ def lzw():
     compressed_image.save(img_buffer, format="JPEG")
     img_buffer = img_buffer.getvalue()
     return img_buffer
+
+
+@app.route('/huffman-encoding', methods=['POST'])
+def huffman(): 
+    class HuffmanNode:
+        def __init__(self, symbol, freq):
+            self.symbol = symbol
+            self.freq = freq
+            self.left = None
+            self.right = None
+
+        def __lt__(self, other):
+            return self.freq < other.freq
+
+
+    def build_frequency_table(data):
+        frequency = defaultdict(int)
+        for symbol in data:
+            frequency[symbol] += 1
+        return frequency
+
+
+    def build_huffman_tree(freq_table):
+        heap = [HuffmanNode(symbol, freq) for symbol, freq in freq_table.items()]
+        heapq.heapify(heap)
+        while len(heap) > 1:
+            left = heapq.heappop(heap)
+            right = heapq.heappop(heap)
+            merge = HuffmanNode(None, left.freq + right.freq)
+            merge.left = left
+            merge.right = right
+            heapq.heappush(heap, merge)
+        return heap[0]
+
+
+    def build_codewords_table(root):
+        codewords = {}
+
+        def generate_codes(current_node, code):
+            if current_node.symbol is not None:
+                codewords[current_node.symbol] = code
+                return
+            generate_codes(current_node.left, code + '0')
+            generate_codes(current_node.right, code + '1')
+
+        generate_codes(root, '')
+        return codewords
+
+
+    def huffman_encoding(data):
+        freq_table = build_frequency_table(data)
+        huffman_tree = build_huffman_tree(freq_table)
+        codewords_table = build_codewords_table(huffman_tree)
+        encoded_data = ''.join(codewords_table[symbol] for symbol in data)
+        return encoded_data, huffman_tree
+
+
+    def huffman_decoding(encoded_data, tree):
+        decoded_data = []
+        current_node = tree
+        for bit in encoded_data:
+            if bit == '0':
+                current_node = current_node.left
+            else:
+                current_node = current_node.right
+            if current_node.symbol is not None:
+                decoded_data.append(current_node.symbol)
+                current_node = tree
+        return bytes(decoded_data)
+    
+    image_file = request.files['images']
+
+    originalImage = Image.open(image_file)
+    image_data = originalImage.tobytes()
+    encoded_data, tree = huffman_encoding(image_data)
+    decoded_data = huffman_decoding(encoded_data, tree)
+    decoded_image = Image.frombytes('RGB', originalImage.size, decoded_data)
+    img_buffer = io.BytesIO()
+    decoded_image.save(img_buffer, format="JPEG")
+    img_buffer = img_buffer.getvalue()
+    return img_buffer
+    
 
 @app.route('/erosion', methods=['POST'])
 def erosion():
