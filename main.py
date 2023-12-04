@@ -322,127 +322,38 @@ def laplace():
 @app.route('/canny-operator', methods=['POST'])
 def canny():
     image_file = request.files['images']
-    # Đọc ảnh và chuyển đổi thành ảnh xám
-    img = Image.open(image_file).convert("L")
-    img_array = np.array(img)
+    img_array = cv2.imdecode(np.frombuffer(image_file.read(), np.uint8), cv2.IMREAD_COLOR)
+    img = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
+    img_blur = cv2.GaussianBlur(img, (3,3), 0) 
 
-    # Áp dụng bộ lọc Gaussian để làm mờ ảnh
-    blurred_img = convolve(img_array, np.array([[1, 2, 1], [2, 4, 2], [1, 2, 1]]) / 16)
+    canny = cv2.Canny(image=img_blur, threshold1=100, threshold2=200)
+    canny = canny.astype(np.uint8)
 
-    # Tính đạo hàm theo chiều ngang và chiều dọc
-    sobel_x = convolve(blurred_img, np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]))
-    sobel_y = convolve(blurred_img, np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]]))
+    pil_image = Image.fromarray(canny)
 
-    # Tính độ lớn gradient và hướng gradient
-    gradient_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
-    gradient_direction = np.arctan2(sobel_y, sobel_x) * (180 / np.pi)
-    low_threshold = 0.1
-    high_threshold = 0.3
-
-    # Áp dụng non-maximum suppression để tìm biên cạnh chính
-    suppressed = np.zeros(img_array.shape, dtype=np.uint8)
-    for i in range(1, img_array.shape[0] - 1):
-        for j in range(1, img_array.shape[1] - 1):
-            angle = gradient_direction[i, j]
-            if (0 <= angle < 22.5) or (157.5 <= angle <= 180) or (-22.5 <= angle < 0) or (-180 <= angle < -157.5):
-                if gradient_magnitude[i, j] >= gradient_magnitude[i, j + 1] and gradient_magnitude[i, j] >= gradient_magnitude[i, j - 1]:
-                    suppressed[i, j] = gradient_magnitude[i, j]
-            elif (22.5 <= angle < 67.5) or (-157.5 <= angle < -112.5):
-                if gradient_magnitude[i, j] >= gradient_magnitude[i - 1, j + 1] and gradient_magnitude[i, j] >= gradient_magnitude[i + 1, j - 1]:
-                    suppressed[i, j] = gradient_magnitude[i, j]
-            elif (67.5 <= angle < 112.5) or (-112.5 <= angle < -67.5):
-                if gradient_magnitude[i, j] >= gradient_magnitude[i - 1, j] and gradient_magnitude[i, j] >= gradient_magnitude[i + 1, j]:
-                    suppressed[i, j] = gradient_magnitude[i, j]
-            elif (112.5 <= angle < 157.5) or (-67.5 <= angle < -22.5):
-                if gradient_magnitude[i, j] >= gradient_magnitude[i - 1, j - 1] and gradient_magnitude[i, j] >= gradient_magnitude[i + 1, j + 1]:
-                    suppressed[i, j] = gradient_magnitude[i, j]
-
-    # Áp dụng ngưỡng hysteresis để tìm biên cạnh cuối cùng
-    edges = np.zeros(img_array.shape, dtype=np.uint8)
-    high_threshold_value = gradient_magnitude.max() * high_threshold
-    low_threshold_value = high_threshold_value * low_threshold
-    strong_i, strong_j = np.where(suppressed >= high_threshold_value)
-    weak_i, weak_j = np.where((suppressed >= low_threshold_value) & (suppressed < high_threshold_value))
-    edges[strong_i, strong_j] = 255
-
-    # Kiểm tra các pixel lân cận của weak edges và xem chúng có nối với strong edges không
-    for i, j in zip(weak_i, weak_j):
-        if np.any(edges[max(0, i - 1):min(img_array.shape[0], i + 2), max(0, j - 1):min(img_array.shape[1], j + 2)] == 255):
-            edges[i, j] = 255
-
-    # Chuyển đổi mảng thành đối tượng ảnh
-    result_image = Image.fromarray(edges)
     img_buffer = io.BytesIO()
-    result_image.save(img_buffer, format="JPEG")
+    pil_image.save(img_buffer, format="JPEG")
+
     img_buffer = img_buffer.getvalue()
     return img_buffer
 
 @app.route('/otsu-algorithm', methods=['POST'])
 def otsu():
     image_file = request.files['images']
-    # Đọc ảnh và chuyển đổi thành ảnh xám
-    img = Image.open(image_file).convert("L")
+    img_array = cv2.imdecode(np.frombuffer(image_file.read(), np.uint8), cv2.IMREAD_COLOR)
+    img = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
+    ret, thresh1 = cv2.threshold(img, 120, 255, cv2.THRESH_BINARY + 
+                                            cv2.THRESH_OTSU) 
+    thresh1 = thresh1.astype(np.uint8)
+    
+    pil_image = Image.fromarray(thresh1)
 
-    # Chuyển đổi ảnh thành mảng numpy
-    img_array = np.array(img)
-
-    # Tính histogram của ảnh
-    histogram, _ = np.histogram(img_array, bins=256, range=(0, 256))
-
-    # Tổng số điểm ảnh trong ảnh
-    total_pixels = img_array.shape[0] * img_array.shape[1]
-
-    # Tính tổng giá trị pixel từ histogram
-    sum_pixels = np.sum(np.arange(256) * histogram)
-
-    # Tạo mảng để lưu giá trị giữa trong quá trình tính Otsu
-    between_variances = np.zeros(256)
-
-    # Tạo mảng để lưu giá trị ngưỡng
-    thresholds = np.arange(256)
-
-    # Tìm ngưỡng tối ưu bằng cách tính giá trị phân tách giữa các lớp
-    for t in thresholds:
-        # Tính số điểm ảnh và histogram của lớp dưới (background)
-        w0 = np.sum(histogram[:t])
-        hist0 = histogram[:t]
-
-        # Tính số điểm ảnh và histogram của lớp trên (foreground)
-        w1 = total_pixels - w0
-        hist1 = histogram[t:]
-
-        # Tính trung bình và phương sai của lớp dưới
-        if w0 > 0:
-            mean0 = np.sum(np.arange(t) * hist0) / w0
-            variance0 = np.sum(((np.arange(t) - mean0) ** 2) * hist0) / w0
-        else:
-            mean0 = 0
-            variance0 = 0
-
-        # Tính trung bình và phương sai của lớp trên
-        if w1 > 0:
-            mean1 = (sum_pixels - np.sum(np.arange(t) * hist0)) / w1
-            variance1 = (np.sum(((np.arange(t) - mean1) ** 2) * hist1)) / w1
-        else:
-            mean1 = 0
-            variance1 = 0
-
-        # Tính tổng giữa lớp dưới và lớp trên
-        between_variances[t] = w0 * w1 * (mean0 - mean1) ** 2
-
-    # Tìm giá trị ngưỡng tối ưu dựa trên giá trị phân tách giữa các lớp
-    optimal_threshold = np.argmax(between_variances)
-
-    # Áp dụng ngưỡng tối ưu để nhị phân hóa ảnh
-    binary_image = img_array > optimal_threshold
-    binary_image = binary_image.astype(np.uint8) * 255
-
-    # Chuyển đổi mảng thành đối tượng ảnh
-    result_image = Image.fromarray(binary_image)
     img_buffer = io.BytesIO()
-    result_image.save(img_buffer, format="JPEG")
+    pil_image.save(img_buffer, format="JPEG")
+
     img_buffer = img_buffer.getvalue()
     return img_buffer
+
 
 @app.route('/run-length-coding', methods=['POST'])
 def rlc():
